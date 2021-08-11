@@ -1,10 +1,7 @@
 ﻿using System;
+using System.Net;
 using System.Text;
 using ZeroLog;
-
-var log = LogManager.GetLogger("Main");
-
-
 
 
 Console.WriteLine("Hello World!");
@@ -22,6 +19,44 @@ static ResultCode FromNum(byte num)
     };
 }
 
+static DnsRecord Read(BytePacketBuffer buffer)
+{
+    var log = LogManager.GetLogger("Main");
+    buffer.ReadQname(out var domain);
+
+    var qtype_num = buffer.ReadU16();
+    var qtype = (QueryType)qtype_num;
+    var _ = buffer.ReadU16();
+    var ttl = buffer.ReadU32();
+    var data_len = buffer.ReadU16();
+
+    switch (qtype)
+    {
+        case QueryType.A:
+        {
+            var raw_addr = buffer.ReadU32();
+            var addr = new IPAddress(raw_addr);
+            log.DebugFormat("Got ip address {}", addr);
+            return new DnsRecordA
+            {
+                Domain = domain,
+                Address = addr,
+                Ttl = ttl
+            };
+        }
+        case QueryType.Unknown:
+            buffer.Step((byte) data_len);
+            return new DnsRecordUnknown
+            {
+                Domain = domain,
+                QType = qtype_num,
+                DataLen = data_len,
+                Ttl = ttl
+            };
+        default:
+            throw new ArgumentOutOfRangeException();
+    }
+}
 //TODO: use System.IO.BinaryReader
 public struct BytePacketBuffer
 {
@@ -275,3 +310,41 @@ public struct DnsHeader
         ResourceEntries = buffer.ReadU16();
     }
 }
+
+public enum QueryType
+{
+    Unknown = 0,
+    A = 1
+}
+
+public struct DnsQuestion
+{
+    public string Name { get; private set; }
+    public QueryType QType { get; private set; }
+
+    public void Read(BytePacketBuffer buffer)
+    {
+        buffer.ReadQname(out var name);
+        Name = name;
+        QType = (QueryType)buffer.ReadU16();
+        var _ = buffer.ReadU16();
+    }
+}
+
+public abstract class DnsRecord
+{
+    public string Domain { get; set; }
+    public uint Ttl { get; set; }
+}
+
+public class DnsRecordUnknown: DnsRecord
+{
+    public ushort QType { get; set; }
+    public ushort DataLen { get; set; }
+}
+
+public class DnsRecordA: DnsRecord
+{
+    public IPAddress Address { get; set; }
+}
+
