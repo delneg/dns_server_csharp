@@ -9,4 +9,8 @@
         <LangVersion>latest</LangVersion>
     </PropertyGroup>
 
+    <ItemGroup>
+      <PackageReference Include="ZeroLog" Version="1.6.1" />
+    </ItemGroup>
+
 </Project>

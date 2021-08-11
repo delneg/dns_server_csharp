@@ -1,8 +1,26 @@
 ﻿using System;
 using System.Text;
+using ZeroLog;
+
+var log = LogManager.GetLogger("Main");
+
+
+
 
 Console.WriteLine("Hello World!");
 
+static ResultCode FromNum(byte num)
+{
+    return num switch
+    {
+        1 => ResultCode.FORMERR,
+        2 => ResultCode.SERVFAIL,
+        3 => ResultCode.NXDOMAIN,
+        4 => ResultCode.NOTIMP,
+        5 => ResultCode.REFUSED,
+        _ => ResultCode.NOERROR
+    };
+}
 public struct BytePacketBuffer
 {
     public byte[] Buf { get; private set; }
@@ -162,3 +180,14 @@ public struct BytePacketBuffer
     }
     
 }
+
+enum ResultCode
+{
+    NOERROR = 0,
+    FORMERR = 1,
+    SERVFAIL = 2,
+    NXDOMAIN = 3,
+    NOTIMP = 4,
+    REFUSED = 5,
+}
+
