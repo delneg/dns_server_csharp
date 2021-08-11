@@ -21,6 +21,8 @@ static ResultCode FromNum(byte num)
         _ => ResultCode.NOERROR
     };
 }
+
+//TODO: use System.IO.BinaryReader
 public struct BytePacketBuffer
 {
     public static BytePacketBuffer New()
@@ -246,6 +248,30 @@ public struct DnsHeader
             ResourceEntries = 0
         };
     }
-    
-    
+
+    public void Read(BytePacketBuffer buffer)
+    {
+        Id = buffer.ReadU16();
+
+        var flags = buffer.ReadU16();
+        var a = (byte)(flags >> 8);
+        var b = (byte)(flags & 0xFF);
+
+        RecursionDesired = (a & (1 << 0)) > 0;
+        TruncatedMessage = (a & (1 << 1)) > 0;
+        AuthoritativeAnswer = (a & (1 << 2)) > 0;
+        Opcode = (byte) ((a >> 3) & 0x0F);
+        Response = (a & (1 << 7)) > 0;
+
+        ResCode = (ResultCode)(b & 0x0F);
+        CheckingDisabled = (b & (1 << 4)) > 0;
+        AuthedData = (b & (1 << 5)) > 0;
+        Z = (b & (1 << 6)) > 0;
+        RecursionAvailable = (b & (1 << 7)) > 0;
+
+        Questions = buffer.ReadU16();
+        Answers = buffer.ReadU16();
+        AuthoritativeEntries = buffer.ReadU16();
+        ResourceEntries = buffer.ReadU16();
+    }
 }
