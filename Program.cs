@@ -1,65 +1,60 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Text;
 using ZeroLog;
 
 
-Console.WriteLine("Hello World!");
+// static ResultCode FromNum(byte num)
+// {
+//     return num switch
+//     {
+//         1 => ResultCode.FORMERR,
+//         2 => ResultCode.SERVFAIL,
+//         3 => ResultCode.NXDOMAIN,
+//         4 => ResultCode.NOTIMP,
+//         5 => ResultCode.REFUSED,
+//         _ => ResultCode.NOERROR
+//     };
+// }
 
-static ResultCode FromNum(byte num)
+var log = LogManager.GetLogger("Main");
+var f = File.ReadAllBytes("resp_google.bin");
+var buffer = new BytePacketBuffer(f);
+
+
+var packet = DnsPacket.FromBuffer(buffer);
+
+log.InfoFormat("Header - {}", packet.Header);
+
+foreach (var q in packet.Questions)
 {
-    return num switch
-    {
-        1 => ResultCode.FORMERR,
-        2 => ResultCode.SERVFAIL,
-        3 => ResultCode.NXDOMAIN,
-        4 => ResultCode.NOTIMP,
-        5 => ResultCode.REFUSED,
-        _ => ResultCode.NOERROR
-    };
+    log.InfoFormat("Question - {}", q);
 }
 
-static DnsRecord Read(BytePacketBuffer buffer)
+foreach (var a in packet.Answers)
 {
-    var log = LogManager.GetLogger("Main");
-    buffer.ReadQname(out var domain);
-
-    var qtype_num = buffer.ReadU16();
-    var qtype = (QueryType)qtype_num;
-    var _ = buffer.ReadU16();
-    var ttl = buffer.ReadU32();
-    var data_len = buffer.ReadU16();
-
-    switch (qtype)
-    {
-        case QueryType.A:
-        {
-            var raw_addr = buffer.ReadU32();
-            var addr = new IPAddress(raw_addr);
-            log.DebugFormat("Got ip address {}", addr);
-            return new DnsRecordA
-            {
-                Domain = domain,
-                Address = addr,
-                Ttl = ttl
-            };
-        }
-        case QueryType.Unknown:
-            buffer.Step((byte) data_len);
-            return new DnsRecordUnknown
-            {
-                Domain = domain,
-                QType = qtype_num,
-                DataLen = data_len,
-                Ttl = ttl
-            };
-        default:
-            throw new ArgumentOutOfRangeException();
-    }
+    log.InfoFormat("Answer - {}", a);
 }
+foreach (var a in packet.Authorities)
+{
+    log.InfoFormat("Authority - {}", a);
+}
+foreach (var r in packet.Resources)
+{
+    log.InfoFormat("Resource - {}", r);
+}
+
 //TODO: use System.IO.BinaryReader
 public struct BytePacketBuffer
 {
+    public BytePacketBuffer(byte[] buf)
+    {
+        Buf = buf;
+        Pos = 0;
+    }
+
     public static BytePacketBuffer New()
     {
         return new BytePacketBuffer
@@ -68,6 +63,7 @@ public struct BytePacketBuffer
             Pos = 0
         };
     }
+    
 
     public byte[] Buf { get; private set; }
     public byte Pos { get; private set; }
@@ -114,14 +110,14 @@ public struct BytePacketBuffer
 
     public ushort ReadU16()
     {
-        var span = new ReadOnlySpan<byte>(this.Buf,2, this.Pos);
+        var span = new ReadOnlySpan<byte>(this.Buf, this.Pos, 2);
         this.Step(0x02);
         return BitConverter.ToUInt16(span);
     }
 
     public uint ReadU32()
     {
-        var span = new ReadOnlySpan<byte>(this.Buf,4, this.Pos);
+        var span = new ReadOnlySpan<byte>(this.Buf, this.Pos, 4);
         this.Step(0x04);
         return BitConverter.ToUInt32(span);
     }
@@ -335,6 +331,44 @@ public abstract class DnsRecord
 {
     public string Domain { get; set; }
     public uint Ttl { get; set; }
+    public static DnsRecord DnsRecordRead(BytePacketBuffer buffer)
+    {
+        var log = LogManager.GetLogger("DnsRecord");
+        buffer.ReadQname(out var domain);
+
+        var qtype_num = buffer.ReadU16();
+        var qtype = (QueryType)qtype_num;
+        var _ = buffer.ReadU16();
+        var ttl = buffer.ReadU32();
+        var data_len = buffer.ReadU16();
+
+        switch (qtype)
+        {
+            case QueryType.A:
+            {
+                var raw_addr = buffer.ReadU32();
+                var addr = new IPAddress(raw_addr);
+                log.DebugFormat("Got ip address {}", addr);
+                return new DnsRecordA
+                {
+                    Domain = domain,
+                    Address = addr,
+                    Ttl = ttl
+                };
+            }
+            case QueryType.Unknown:
+                buffer.Step((byte) data_len);
+                return new DnsRecordUnknown
+                {
+                    Domain = domain,
+                    QType = qtype_num,
+                    DataLen = data_len,
+                    Ttl = ttl
+                };
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+    }
 }
 
 public class DnsRecordUnknown: DnsRecord
@@ -348,3 +382,52 @@ public class DnsRecordA: DnsRecord
     public IPAddress Address { get; set; }
 }
 
+public struct DnsPacket
+{
+    public DnsHeader Header;
+    public List<DnsQuestion> Questions;
+    public List<DnsRecord> Answers;
+    public List<DnsRecord> Authorities;
+    public List<DnsRecord> Resources;
+
+    public DnsPacket(List<DnsRecord> answers, List<DnsRecord> authorities, List<DnsRecord> resources, List<DnsQuestion> questions)
+    {
+        Answers = answers;
+        Authorities = authorities;
+        Resources = resources;
+        Questions = questions;
+        Header = DnsHeader.New();
+    }
+
+    public static DnsPacket FromBuffer(BytePacketBuffer buffer)
+    {
+        var result = new DnsPacket(new List<DnsRecord>(),new List<DnsRecord>(), new List<DnsRecord>(), new List<DnsQuestion>());
+        result.Header.Read(buffer);
+
+        for (ushort i = 0; i < result.Header.Questions; i++)
+        {
+            var question = new DnsQuestion();
+            question.Read(buffer);
+            result.Questions.Add(question);
+        }
+
+        for (ushort i = 0; i < result.Header.Answers; i++)
+        {
+            var rec = DnsRecord.DnsRecordRead(buffer);
+            result.Answers.Add(rec);
+        }
+        
+        for (ushort i = 0; i < result.Header.AuthoritativeEntries; i++)
+        {
+            var rec = DnsRecord.DnsRecordRead(buffer);
+            result.Authorities.Add(rec);
+        }
+        for (ushort i = 0; i < result.Header.ResourceEntries; i++)
+        {
+            var rec = DnsRecord.DnsRecordRead(buffer);
+            result.Resources.Add(rec);
+        }
+
+        return result;
+    }
+}
