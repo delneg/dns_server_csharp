@@ -23,6 +23,15 @@ static ResultCode FromNum(byte num)
 }
 public struct BytePacketBuffer
 {
+    public static BytePacketBuffer New()
+    {
+        return new BytePacketBuffer
+        {
+            Buf = new byte[512],
+            Pos = 0
+        };
+    }
+
     public byte[] Buf { get; private set; }
     public byte Pos { get; private set; }
 
@@ -181,7 +190,7 @@ public struct BytePacketBuffer
     
 }
 
-enum ResultCode
+public enum ResultCode
 {
     NOERROR = 0,
     FORMERR = 1,
@@ -191,3 +200,52 @@ enum ResultCode
     REFUSED = 5,
 }
 
+
+public struct DnsHeader
+{
+    public ushort Id { get; private set; } // 16 bits
+    
+    public bool RecursionDesired { get; private set; } // 1 bit
+    public bool TruncatedMessage { get; private set; } // 1 bit
+    public bool AuthoritativeAnswer { get; private set; } // 1 bit
+    public byte Opcode { get; private set; } // 4 bits
+    public bool Response { get; private set; } // 1 bit
+    
+    public ResultCode ResCode { get; private set; } // 4 bits
+    public bool CheckingDisabled { get; private set; } // 1 bit
+    public bool AuthedData { get; private set; } // 1 bit
+    public bool Z { get; private set; } // 1 bit
+    public bool RecursionAvailable { get; private set; } // 1 bit
+    
+    public ushort Questions { get; private set; } // 16 bits
+    public ushort Answers { get; private set; } // 16 bits
+    public ushort AuthoritativeEntries { get; private set; } // 16 bits
+    public ushort ResourceEntries { get; private set; } // 16 bits
+    
+    
+    public static DnsHeader New()
+    {
+        return new DnsHeader()
+        {
+            Id = 0,
+            RecursionDesired = false,
+            TruncatedMessage = false,
+            AuthoritativeAnswer = false,
+            Opcode = 0,
+            Response = false,
+            
+            ResCode = ResultCode.NOERROR,
+            CheckingDisabled = false,
+            AuthedData = false,
+            Z = false,
+            RecursionAvailable = false,
+            
+            Questions = 0,
+            Answers = 0,
+            AuthoritativeEntries = 0,
+            ResourceEntries = 0
+        };
+    }
+    
+    
+}
