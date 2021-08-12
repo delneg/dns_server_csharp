@@ -5,35 +5,36 @@ using System.Net;
 using System.Text;
 using DnsServer;
 using ZeroLog;
+using ZeroLog.Appenders;
+using ZeroLog.Config;
 
 
-
-
+BasicConfigurator.Configure(new[] { new ConsoleAppender() });
 var log = LogManager.GetLogger("Main");
 var f = File.OpenRead("resp_google.bin");
 
 
 var packet = DnsPacket.FromStream(f);
 
-log.InfoFormat("Header - {}", packet.Header);
-
-foreach (var q in packet.Questions)
-{
-    log.InfoFormat("Question - {}", q);
-}
-
-foreach (var a in packet.Answers)
-{
-    log.InfoFormat("Answer - {}", a);
-}
-foreach (var a in packet.Authorities)
-{
-    log.InfoFormat("Authority - {}", a);
-}
-foreach (var r in packet.Resources)
-{
-    log.InfoFormat("Resource - {}", r);
-}
+// log.InfoFormat("Header - {0}", packet.Header);
+//
+// foreach (var q in packet.Questions)
+// {
+//     log.InfoFormat("Question - {0}", q);
+// }
+//
+// foreach (var a in packet.Answers)
+// {
+//     log.InfoFormat("Answer - {0}", a);
+// }
+// foreach (var a in packet.Authorities)
+// {
+//     log.InfoFormat("Authority - {0}", a);
+// }
+// foreach (var r in packet.Resources)
+// {
+//     log.InfoFormat("Resource - {0}", r);
+// }
 public enum ResultCode
 {
     NOERROR = 0,
@@ -159,6 +160,10 @@ public struct DnsQuestion
 {
     public string Name { get; private set; }
     public QueryType QType { get; private set; }
+    public override string ToString()
+    {
+        return $"DnsQuestion - {Name}, QType - {Enum.GetName(QType)}";
+    }
 
     /// Read a qname
     ///
@@ -186,6 +191,7 @@ public struct DnsQuestion
 
         var builder = new StringBuilder();
 
+        long finalAfterJumpPosition = 0;
         while (true)
         {
             // Dns Packets are untrusted data, so we need to be paranoid. Someone
@@ -207,21 +213,31 @@ public struct DnsQuestion
             // jump to some other offset in the packet:
             if ((len & 0xC0) == 0xC0)
             {
-                if (!jumped)
-                {
-                    reader.BaseStream.Seek(2, SeekOrigin.Current);
-                }
+                Console.WriteLine($"Performing jump");
                 // Read another byte, calculate offset and perform the jump by
                 // updating our local position variable
                 var b2 = (ushort) reader.PeekChar();
-                var offset = ((len ^ 0xC0) << 0x08) | b2;
-                pos = (byte) offset;
-                reader.BaseStream.Seek(offset, SeekOrigin.Current);
                 
+                if (!jumped)
+                {
+                    Console.WriteLine($"Seeking to {pos + 2} from {reader.BaseStream.Position}, pos - {pos}");
+                    reader.BaseStream.Seek(1, SeekOrigin.Current); // 1 because we read len byte
+                    Console.WriteLine($"After seek stream position - {reader.BaseStream.Position},pos - {pos}");
+                    finalAfterJumpPosition = pos + 2;
+                }
+                
+                Console.WriteLine($"b2 = {b2}");
+                var offset = ((len ^ 0xC0) << 8) | b2;
+                Console.WriteLine($"Offset - {offset}");
+                pos = (byte) offset;
+                Console.WriteLine($"Setting pos to {pos}");
+                reader.BaseStream.Seek(offset, SeekOrigin.Begin);
+                Console.WriteLine($"Seeking to {offset} from {reader.BaseStream.Position}, pos - {pos}");
                 
                 // Indicate that a jump was performed.
                 jumped = true;
                 jumpsPerformed += 1;
+                Console.WriteLine($"Jump finished with  stream position - {reader.BaseStream.Position},pos {pos}");
                 
                 continue;
             }
@@ -230,7 +246,7 @@ public struct DnsQuestion
             else
             {
                 // Move a single byte forward to move past the length byte.
-                Console.WriteLine($"Advancing pos {pos} += 1");
+                Console.WriteLine($"Not jumping, Advancing pos {pos} += 1");
                 pos += 1;
                 
                 // Domain names are terminated by an empty label of length 0,
@@ -260,7 +276,11 @@ public struct DnsQuestion
         if (!jumped)
         {
             Console.WriteLine($"Didn't jump, pos - {pos}, stream.Position - {reader.BaseStream.Position}");
-            // this.Seek(pos);
+        }
+        else
+        {
+            Console.WriteLine($"Did jump, setting position from {reader.BaseStream.Position} to {finalAfterJumpPosition}");
+            reader.BaseStream.Seek(finalAfterJumpPosition, SeekOrigin.Begin);
         }
 
         outString = builder.ToString();
@@ -273,6 +293,7 @@ public struct DnsQuestion
         QType = (QueryType)reader.ReadUInt16BE();
         Console.WriteLine($"DnsQuestion read QType - {QType}, pos - {reader.BaseStream.Position}");
         var _ = reader.ReadUInt16BE();
+        Console.WriteLine($"DnsQuestion read class, pos - {reader.BaseStream.Position}");
     }
 }
 
@@ -299,7 +320,7 @@ public abstract class DnsRecord
             {
                 var raw_addr = reader.ReadUInt32BE();
                 var addr = new IPAddress(raw_addr);
-                Console.WriteLine("Got ip address {}", addr);
+                Console.WriteLine($"Got ip address {addr}");
                 return new DnsRecordA
                 {
                     Domain = domain,
