@@ -40,7 +40,8 @@ public struct DnsHeader
     public override string ToString()
     {
         return $"\n" +
-               $"DnsHeader - id:{Id},RecursionDesired:{RecursionDesired}\n" +
+               $"DnsHeader - id:{Id}\n" +
+               $"RecursionDesired:{RecursionDesired}\n" +
                $"TruncatedMessage:{TruncatedMessage}\n" +
                $"AuthoritativeAnswer:{AuthoritativeAnswer}\n" +
                $"OpCode:{Opcode}\n" +
