@@ -6,18 +6,7 @@ using System.Text;
 using ZeroLog;
 
 
-// static ResultCode FromNum(byte num)
-// {
-//     return num switch
-//     {
-//         1 => ResultCode.FORMERR,
-//         2 => ResultCode.SERVFAIL,
-//         3 => ResultCode.NXDOMAIN,
-//         4 => ResultCode.NOTIMP,
-//         5 => ResultCode.REFUSED,
-//         _ => ResultCode.NOERROR
-//     };
-// }
+
 
 var log = LogManager.GetLogger("Main");
 var f = File.ReadAllBytes("resp_google.bin");
@@ -70,22 +59,25 @@ public struct BytePacketBuffer
 
     public void Step(byte steps)
     {
-        this.Pos += steps;
+        Pos += steps;
+        Console.WriteLine($"stepped {steps}, position is now {Pos}");
     }
 
     public void Seek(byte newPos)
     {
-        this.Pos = newPos;
+        Console.WriteLine($"Seeking - chaning Pos from {Pos} to {newPos}");
+        Pos = newPos;
     }
     public byte Read()
     {
-        if (this.Pos >= 512)
+        if (Pos >= 512)
         {
             throw new Exception("End of buffer");
         }
 
-        var res = this.Buf[this.Pos];
-        this.Pos += 1;
+        var res = Buf[Pos];
+        Pos += 1;
+        
         return res;
     }
     
@@ -95,7 +87,7 @@ public struct BytePacketBuffer
         {
             throw new Exception("End of buffer");
         }
-        return this.Buf[getPos];
+        return Buf[getPos];
     }
 
     public Span<byte> GetRange(byte start, byte len)
@@ -105,7 +97,7 @@ public struct BytePacketBuffer
             throw new Exception("End of buffer");
         }
 
-        return this.Buf.AsSpan().Slice(start, len);
+        return Buf.AsSpan().Slice(start, len);
     }
 
     public ushort ReadU16()
@@ -134,7 +126,7 @@ public struct BytePacketBuffer
         // allows us to move the shared position to a point past our current
         // qname, while keeping track of our progress on the current qname
         // using this variable.
-        var pos = this.Pos;
+        var pos = Pos;
         
         // track whether or not we've jumped
         var jumped = false;
@@ -162,7 +154,9 @@ public struct BytePacketBuffer
             // At this point, we're always at the beginning of a label. Recall
             // that labels start with a length byte.
 
+            Console.WriteLine($"Getting length at {pos}");
             var len = this.Get(pos);
+            Console.WriteLine($"Length is {len}");
             // If len has the two most significant bit are set, it represents a
             // jump to some other offset in the packet:
             if ((len & 0xC0) == 0xC0)
@@ -189,11 +183,13 @@ public struct BytePacketBuffer
             else
             {
                 // Move a single byte forward to move past the length byte.
+                Console.WriteLine($"Advancing pos {pos} += 1");
                 pos += 1;
                 
                 // Domain names are terminated by an empty label of length 0,
                 // so if the length is zero we're done.
                 if (len == 0) {
+                    Console.WriteLine($"Reached null terminator");
                     break;
                 }
 
@@ -208,6 +204,7 @@ public struct BytePacketBuffer
                 delim = ".";
                 
                 // Move forward the full length of the label.
+                Console.WriteLine($"Advancing pos {pos} to {pos + len}");
                 pos += len;
             }
 
@@ -256,6 +253,18 @@ public struct DnsHeader
     public ushort ResourceEntries { get; private set; } // 16 bits
     
     
+    public static ResultCode GetResultCodeFromNum(byte num)
+    {
+        return num switch
+        {
+            1 => ResultCode.FORMERR,
+            2 => ResultCode.SERVFAIL,
+            3 => ResultCode.NXDOMAIN,
+            4 => ResultCode.NOTIMP,
+            5 => ResultCode.REFUSED,
+            _ => ResultCode.NOERROR
+        };
+    }
     public static DnsHeader New()
     {
         return new DnsHeader()
@@ -294,7 +303,7 @@ public struct DnsHeader
         Opcode = (byte) ((a >> 3) & 0x0F);
         Response = (a & (1 << 7)) > 0;
 
-        ResCode = (ResultCode)(b & 0x0F);
+        ResCode = GetResultCodeFromNum((byte)(b & 0x0F));
         CheckingDisabled = (b & (1 << 4)) > 0;
         AuthedData = (b & (1 << 5)) > 0;
         Z = (b & (1 << 6)) > 0;
