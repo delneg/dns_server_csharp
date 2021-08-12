@@ -282,14 +282,16 @@ public abstract class DnsRecord
     public uint Ttl { get; set; }
     public static DnsRecord DnsRecordRead(BinaryReader reader)
     {
-        var log = LogManager.GetLogger("DnsRecord");
+        Console.WriteLine($"Starting to read DnsRecord, pos - {reader.BaseStream.Position}");
         DnsQuestion.ReadQname(reader,out var domain);
 
+        Console.WriteLine($"Read QName, pos - {reader.BaseStream.Position}, name - {domain}");
         var qtype_num = reader.ReadUInt16BE();
         var qtype = (QueryType)qtype_num;
         var _ = reader.ReadUInt16BE();
         var ttl = reader.ReadUInt32BE();
         var data_len = reader.ReadUInt16BE();
+        Console.WriteLine($"Read qtype - {qtype}, ttl - {ttl}, data_len - {data_len}");
 
         switch (qtype)
         {
@@ -297,7 +299,7 @@ public abstract class DnsRecord
             {
                 var raw_addr = reader.ReadUInt32BE();
                 var addr = new IPAddress(raw_addr);
-                log.DebugFormat("Got ip address {}", addr);
+                Console.WriteLine("Got ip address {}", addr);
                 return new DnsRecordA
                 {
                     Domain = domain,
