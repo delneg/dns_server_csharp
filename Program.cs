@@ -9,11 +9,10 @@ using ZeroLog;
 
 
 var log = LogManager.GetLogger("Main");
-var f = File.ReadAllBytes("resp_google.bin");
-var buffer = new BytePacketBuffer(f);
+var f = File.OpenRead("resp_google.bin");
 
 
-var packet = DnsPacket.FromBuffer(buffer);
+var packet = DnsPacket.FromStream(f);
 
 log.InfoFormat("Header - {}", packet.Header);
 
@@ -34,192 +33,6 @@ foreach (var r in packet.Resources)
 {
     log.InfoFormat("Resource - {}", r);
 }
-
-//TODO: use System.IO.BinaryReader
-public struct BytePacketBuffer
-{
-    public BytePacketBuffer(byte[] buf)
-    {
-        Buf = buf;
-        Pos = 0;
-    }
-
-    public static BytePacketBuffer New()
-    {
-        return new BytePacketBuffer
-        {
-            Buf = new byte[512],
-            Pos = 0
-        };
-    }
-    
-
-    public byte[] Buf { get; private set; }
-    public byte Pos { get; private set; }
-
-    public void Step(byte steps)
-    {
-        Pos += steps;
-        Console.WriteLine($"stepped {steps}, position is now {Pos}");
-    }
-
-    public void Seek(byte newPos)
-    {
-        Console.WriteLine($"Seeking - chaning Pos from {Pos} to {newPos}");
-        Pos = newPos;
-    }
-    public byte Read()
-    {
-        if (Pos >= 512)
-        {
-            throw new Exception("End of buffer");
-        }
-
-        var res = Buf[Pos];
-        Pos += 1;
-        
-        return res;
-    }
-    
-    public byte Get(byte getPos)
-    {
-        if (getPos >= 512)
-        {
-            throw new Exception("End of buffer");
-        }
-        return Buf[getPos];
-    }
-
-    public Span<byte> GetRange(byte start, byte len)
-    {
-        if (start + len >= 512)
-        {
-            throw new Exception("End of buffer");
-        }
-
-        return Buf.AsSpan().Slice(start, len);
-    }
-
-    public ushort ReadU16()
-    {
-        var span = new ReadOnlySpan<byte>(this.Buf, this.Pos, 2);
-        this.Step(0x02);
-        return BitConverter.ToUInt16(span);
-    }
-
-    public uint ReadU32()
-    {
-        var span = new ReadOnlySpan<byte>(this.Buf, this.Pos, 4);
-        this.Step(0x04);
-        return BitConverter.ToUInt32(span);
-    }
-
-    /// Read a qname
-    ///
-    /// The tricky part: Reading domain names, taking labels into consideration.
-    /// Will take something like [3]www[6]google[3]com[0] and append
-    /// www.google.com to outstr.
-    public void ReadQname(out string outString)
-    {
-        // Since we might encounter jumps, we'll keep track of our position
-        // locally as opposed to using the position within the struct. This
-        // allows us to move the shared position to a point past our current
-        // qname, while keeping track of our progress on the current qname
-        // using this variable.
-        var pos = Pos;
-        
-        // track whether or not we've jumped
-        var jumped = false;
-        const int maxJumps = 5;
-        var jumpsPerformed = 0;
-        
-        // Our delimiter which we append for each label. Since we don't want a
-        // dot at the beginning of the domain name we'll leave it empty for now
-        // and set it to "." at the end of the first iteration.
-        var delim = "";
-
-        var builder = new StringBuilder();
-
-        while (true)
-        {
-            // Dns Packets are untrusted data, so we need to be paranoid. Someone
-            // can craft a packet with a cycle in the jump instructions. This guards
-            // against such packets.
-            if (jumpsPerformed > maxJumps)
-            {
-                outString = null;
-                throw new Exception($"Limit of {maxJumps} exceeded");
-            }
-            
-            // At this point, we're always at the beginning of a label. Recall
-            // that labels start with a length byte.
-
-            Console.WriteLine($"Getting length at {pos}");
-            var len = this.Get(pos);
-            Console.WriteLine($"Length is {len}");
-            // If len has the two most significant bit are set, it represents a
-            // jump to some other offset in the packet:
-            if ((len & 0xC0) == 0xC0)
-            {
-                if (!jumped)
-                {
-                    this.Seek((byte) (pos + 2));
-                }
-                // Read another byte, calculate offset and perform the jump by
-                // updating our local position variable
-                var b2 = this.Get((byte) (pos + 1));
-                var offset = ((len ^ 0xC0) << 0x08) | b2;
-                pos = (byte) offset;
-                
-                
-                // Indicate that a jump was performed.
-                jumped = true;
-                jumpsPerformed += 1;
-                
-                continue;
-            }
-            // The base scenario, where we're reading a single label and
-            // appending it to the output:
-            else
-            {
-                // Move a single byte forward to move past the length byte.
-                Console.WriteLine($"Advancing pos {pos} += 1");
-                pos += 1;
-                
-                // Domain names are terminated by an empty label of length 0,
-                // so if the length is zero we're done.
-                if (len == 0) {
-                    Console.WriteLine($"Reached null terminator");
-                    break;
-                }
-
-                // Append the delimiter to our output buffer first.
-                builder.Append(delim.AsSpan());
-
-                // Extract the actual ASCII bytes for this label and append them
-                // to the output buffer.
-                var strBuffer = this.GetRange(pos, len);
-                builder.Append(Encoding.UTF8.GetString(strBuffer).ToLower());
-                
-                delim = ".";
-                
-                // Move forward the full length of the label.
-                Console.WriteLine($"Advancing pos {pos} to {pos + len}");
-                pos += len;
-            }
-
-        }
-
-        if (!jumped)
-        {
-            this.Seek(pos);
-        }
-
-        outString = builder.ToString();
-    }
-    
-}
-
 public enum ResultCode
 {
     NOERROR = 0,
@@ -289,11 +102,10 @@ public struct DnsHeader
         };
     }
 
-    public void Read(BytePacketBuffer buffer)
+    public void Read(BinaryReader reader)
     {
-        Id = buffer.ReadU16();
-
-        var flags = buffer.ReadU16();
+        Id = reader.ReadUInt16();
+        var flags = reader.ReadUInt16();
         var a = (byte)(flags >> 8);
         var b = (byte)(flags & 0xFF);
 
@@ -309,10 +121,10 @@ public struct DnsHeader
         Z = (b & (1 << 6)) > 0;
         RecursionAvailable = (b & (1 << 7)) > 0;
 
-        Questions = buffer.ReadU16();
-        Answers = buffer.ReadU16();
-        AuthoritativeEntries = buffer.ReadU16();
-        ResourceEntries = buffer.ReadU16();
+        Questions = reader.ReadUInt16();
+        Answers = reader.ReadUInt16();
+        AuthoritativeEntries = reader.ReadUInt16();
+        ResourceEntries = reader.ReadUInt16();
     }
 }
 
@@ -327,12 +139,117 @@ public struct DnsQuestion
     public string Name { get; private set; }
     public QueryType QType { get; private set; }
 
-    public void Read(BytePacketBuffer buffer)
+    /// Read a qname
+    ///
+    /// The tricky part: Reading domain names, taking labels into consideration.
+    /// Will take something like [3]www[6]google[3]com[0] and append
+    /// www.google.com to outstr.
+    public static void ReadQname(BinaryReader reader,out string outString)
     {
-        buffer.ReadQname(out var name);
+        // Since we might encounter jumps, we'll keep track of our position
+        // locally as opposed to using the position within the struct. This
+        // allows us to move the shared position to a point past our current
+        // qname, while keeping track of our progress on the current qname
+        // using this variable.
+        var pos = reader.BaseStream.Position;
+        
+        // track whether or not we've jumped
+        var jumped = false;
+        const int maxJumps = 5;
+        var jumpsPerformed = 0;
+        
+        // Our delimiter which we append for each label. Since we don't want a
+        // dot at the beginning of the domain name we'll leave it empty for now
+        // and set it to "." at the end of the first iteration.
+        var delim = "";
+
+        var builder = new StringBuilder();
+
+        while (true)
+        {
+            // Dns Packets are untrusted data, so we need to be paranoid. Someone
+            // can craft a packet with a cycle in the jump instructions. This guards
+            // against such packets.
+            if (jumpsPerformed > maxJumps)
+            {
+                outString = null;
+                throw new Exception($"Limit of {maxJumps} exceeded");
+            }
+            
+            // At this point, we're always at the beginning of a label. Recall
+            // that labels start with a length byte.
+
+            Console.WriteLine($"Getting length at {pos}");
+            var len = reader.ReadByte();
+            Console.WriteLine($"Length is {len}");
+            // If len has the two most significant bit are set, it represents a
+            // jump to some other offset in the packet:
+            if ((len & 0xC0) == 0xC0)
+            {
+                if (!jumped)
+                {
+                    reader.BaseStream.Seek(2, SeekOrigin.Current);
+                }
+                // Read another byte, calculate offset and perform the jump by
+                // updating our local position variable
+                var b2 = (ushort) reader.PeekChar();
+                var offset = ((len ^ 0xC0) << 0x08) | b2;
+                pos = (byte) offset;
+                reader.BaseStream.Seek(offset, SeekOrigin.Current);
+                
+                
+                // Indicate that a jump was performed.
+                jumped = true;
+                jumpsPerformed += 1;
+                
+                continue;
+            }
+            // The base scenario, where we're reading a single label and
+            // appending it to the output:
+            else
+            {
+                // Move a single byte forward to move past the length byte.
+                Console.WriteLine($"Advancing pos {pos} += 1");
+                pos += 1;
+                
+                // Domain names are terminated by an empty label of length 0,
+                // so if the length is zero we're done.
+                if (len == 0) {
+                    Console.WriteLine($"Reached null terminator");
+                    break;
+                }
+
+                // Append the delimiter to our output buffer first.
+                builder.Append(delim.AsSpan());
+
+                // Extract the actual ASCII bytes for this label and append them
+                // to the output buffer.
+                var strBuffer = reader.ReadChars(len);
+                builder.Append(new string(strBuffer).ToLower());
+                
+                delim = ".";
+                
+                // Move forward the full length of the label.
+                Console.WriteLine($"Advancing pos {pos} to {pos + len}");
+                pos += len;
+            }
+
+        }
+
+        if (!jumped)
+        {
+            Console.WriteLine($"Didn't jump, pos - {pos}, stream.Position - {reader.BaseStream.Position}");
+            // this.Seek(pos);
+        }
+
+        outString = builder.ToString();
+    }
+    public void Read(BinaryReader reader)
+    {
+        ReadQname(reader,out var name);
         Name = name;
-        QType = (QueryType)buffer.ReadU16();
-        var _ = buffer.ReadU16();
+        QType = (QueryType)reader.ReadUInt16();
+        var _ = reader.ReadUInt16();
     }
 }
 
@@ -340,22 +257,22 @@ public abstract class DnsRecord
 {
     public string Domain { get; set; }
     public uint Ttl { get; set; }
-    public static DnsRecord DnsRecordRead(BytePacketBuffer buffer)
+    public static DnsRecord DnsRecordRead(BinaryReader reader)
     {
         var log = LogManager.GetLogger("DnsRecord");
-        buffer.ReadQname(out var domain);
+        DnsQuestion.ReadQname(reader,out var domain);
 
-        var qtype_num = buffer.ReadU16();
+        var qtype_num = reader.ReadUInt16();
         var qtype = (QueryType)qtype_num;
-        var _ = buffer.ReadU16();
-        var ttl = buffer.ReadU32();
-        var data_len = buffer.ReadU16();
+        var _ = reader.ReadUInt16();
+        var ttl = reader.ReadUInt32();
+        var data_len = reader.ReadUInt16();
 
         switch (qtype)
         {
             case QueryType.A:
             {
-                var raw_addr = buffer.ReadU32();
+                var raw_addr = reader.ReadUInt32();
                 var addr = new IPAddress(raw_addr);
                 log.DebugFormat("Got ip address {}", addr);
                 return new DnsRecordA
@@ -366,7 +283,7 @@ public abstract class DnsRecord
                 };
             }
             case QueryType.Unknown:
-                buffer.Step((byte) data_len);
+                reader.BaseStream.Seek(data_len, SeekOrigin.Current);
                 return new DnsRecordUnknown
                 {
                     Domain = domain,
@@ -408,33 +325,37 @@ public struct DnsPacket
         Header = DnsHeader.New();
     }
 
-    public static DnsPacket FromBuffer(BytePacketBuffer buffer)
+    public static DnsPacket FromStream(Stream stream)
     {
         var result = new DnsPacket(new List<DnsRecord>(),new List<DnsRecord>(), new List<DnsRecord>(), new List<DnsQuestion>());
-        result.Header.Read(buffer);
-
-        for (ushort i = 0; i < result.Header.Questions; i++)
-        {
-            var question = new DnsQuestion();
-            question.Read(buffer);
-            result.Questions.Add(question);
-        }
-
-        for (ushort i = 0; i < result.Header.Answers; i++)
-        {
-            var rec = DnsRecord.DnsRecordRead(buffer);
-            result.Answers.Add(rec);
-        }
         
-        for (ushort i = 0; i < result.Header.AuthoritativeEntries; i++)
+        using (var reader = new BinaryReader(stream))
         {
-            var rec = DnsRecord.DnsRecordRead(buffer);
-            result.Authorities.Add(rec);
-        }
-        for (ushort i = 0; i < result.Header.ResourceEntries; i++)
-        {
-            var rec = DnsRecord.DnsRecordRead(buffer);
-            result.Resources.Add(rec);
+            result.Header.Read(reader);
+
+            for (ushort i = 0; i < result.Header.Questions; i++)
+            {
+                var question = new DnsQuestion();
+                question.Read(reader);
+                result.Questions.Add(question);
+            }
+
+            for (ushort i = 0; i < result.Header.Answers; i++)
+            {
+                var rec = DnsRecord.DnsRecordRead(reader);
+                result.Answers.Add(rec);
+            }
+        
+            for (ushort i = 0; i < result.Header.AuthoritativeEntries; i++)
+            {
+                var rec = DnsRecord.DnsRecordRead(reader);
+                result.Authorities.Add(rec);
+            }
+            for (ushort i = 0; i < result.Header.ResourceEntries; i++)
+            {
+                var rec = DnsRecord.DnsRecordRead(reader);
+                result.Resources.Add(rec);
+            }
         }
 
         return result;
