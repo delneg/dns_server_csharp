@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
+using DnsServer;
 using ZeroLog;
 
 
@@ -43,7 +44,6 @@ public enum ResultCode
     REFUSED = 5,
 }
 
-
 public struct DnsHeader
 {
     public ushort Id { get; private set; } // 16 bits
@@ -64,8 +64,26 @@ public struct DnsHeader
     public ushort Answers { get; private set; } // 16 bits
     public ushort AuthoritativeEntries { get; private set; } // 16 bits
     public ushort ResourceEntries { get; private set; } // 16 bits
-    
-    
+
+    public override string ToString()
+    {
+        return $"DnsHeader - id:{Id},RecursionDesired:{RecursionDesired}," +
+               $"TruncatedMessage:{TruncatedMessage}," +
+               $"AuthoritativeAnswer:{AuthoritativeAnswer}," +
+               $"OpCode:{Opcode}," +
+               $"Response:{Response}," +
+               $"ResCode:{ResCode}," +
+               $"CheckingDisabled:{CheckingDisabled}," +
+               $"AuthedData:{AuthedData}," +
+               $"Z:{Z}," +
+               $"RecursionAvailable:{RecursionAvailable}," +
+               $"Questions:{Questions}," +
+               $"Answers:{Answers}," +
+               $"AuthoritativeEntries:{AuthoritativeEntries}," +
+               $"ResourceEntries:{ResourceEntries}";
+
+    }
+
     public static ResultCode GetResultCodeFromNum(byte num)
     {
         return num switch
@@ -102,10 +120,13 @@ public struct DnsHeader
         };
     }
 
+    
     public void Read(BinaryReader reader)
     {
-        Id = reader.ReadUInt16();
-        var flags = reader.ReadUInt16();
+        Id = reader.ReadUInt16BE();
+        Console.WriteLine($"Read id - {Id}, pos - {reader.BaseStream.Position}");
+        var flags = reader.ReadUInt16BE();
+        Console.WriteLine($"Read flags - {flags}, pos - {reader.BaseStream.Position}");
         var a = (byte)(flags >> 8);
         var b = (byte)(flags & 0xFF);
 
@@ -115,16 +136,16 @@ public struct DnsHeader
         Opcode = (byte) ((a >> 3) & 0x0F);
         Response = (a & (1 << 7)) > 0;
 
-        ResCode = GetResultCodeFromNum((byte)(b & 0x0F));
+        ResCode = (ResultCode)(byte)(b & 0x0F);
         CheckingDisabled = (b & (1 << 4)) > 0;
         AuthedData = (b & (1 << 5)) > 0;
         Z = (b & (1 << 6)) > 0;
         RecursionAvailable = (b & (1 << 7)) > 0;
 
-        Questions = reader.ReadUInt16();
-        Answers = reader.ReadUInt16();
-        AuthoritativeEntries = reader.ReadUInt16();
-        ResourceEntries = reader.ReadUInt16();
+        Questions = reader.ReadUInt16BE();
+        Answers = reader.ReadUInt16BE();
+        AuthoritativeEntries = reader.ReadUInt16BE();
+        ResourceEntries = reader.ReadUInt16BE();
     }
 }
 
@@ -247,9 +268,11 @@ public struct DnsQuestion
     public void Read(BinaryReader reader)
     {
         ReadQname(reader,out var name);
+        Console.WriteLine($"DnsQuestion read name - {name}, pos - {reader.BaseStream.Position}");
         Name = name;
-        QType = (QueryType)reader.ReadUInt16();
-        var _ = reader.ReadUInt16();
+        QType = (QueryType)reader.ReadUInt16BE();
+        Console.WriteLine($"DnsQuestion read QType - {QType}, pos - {reader.BaseStream.Position}");
+        var _ = reader.ReadUInt16BE();
     }
 }
 
@@ -262,17 +285,17 @@ public abstract class DnsRecord
         var log = LogManager.GetLogger("DnsRecord");
         DnsQuestion.ReadQname(reader,out var domain);
 
-        var qtype_num = reader.ReadUInt16();
+        var qtype_num = reader.ReadUInt16BE();
         var qtype = (QueryType)qtype_num;
-        var _ = reader.ReadUInt16();
-        var ttl = reader.ReadUInt32();
-        var data_len = reader.ReadUInt16();
+        var _ = reader.ReadUInt16BE();
+        var ttl = reader.ReadUInt32BE();
+        var data_len = reader.ReadUInt16BE();
 
         switch (qtype)
         {
             case QueryType.A:
             {
-                var raw_addr = reader.ReadUInt32();
+                var raw_addr = reader.ReadUInt32BE();
                 var addr = new IPAddress(raw_addr);
                 log.DebugFormat("Got ip address {}", addr);
                 return new DnsRecordA
@@ -331,28 +354,35 @@ public struct DnsPacket
         
         using (var reader = new BinaryReader(stream))
         {
+            Console.WriteLine($"Reading header, pos - {reader.BaseStream.Position}");
             result.Header.Read(reader);
-
+            Console.WriteLine($"Finished header\n{result.Header}");
             for (ushort i = 0; i < result.Header.Questions; i++)
             {
+                Console.WriteLine($"Reading question #{i}, pos - {reader.BaseStream.Position}");
                 var question = new DnsQuestion();
                 question.Read(reader);
                 result.Questions.Add(question);
+                Console.WriteLine($"Finished reading question #{i}\n\n");
             }
 
             for (ushort i = 0; i < result.Header.Answers; i++)
             {
+                Console.WriteLine($"Reading Answers #{i}, pos - {reader.BaseStream.Position}");
                 var rec = DnsRecord.DnsRecordRead(reader);
                 result.Answers.Add(rec);
+                Console.WriteLine($"Finished reading answer #{i}\n\n");
             }
         
             for (ushort i = 0; i < result.Header.AuthoritativeEntries; i++)
             {
+                Console.WriteLine($"Reading AuthoritativeEntries #{i}, pos - {reader.BaseStream.Position}");
                 var rec = DnsRecord.DnsRecordRead(reader);
                 result.Authorities.Add(rec);
             }
             for (ushort i = 0; i < result.Header.ResourceEntries; i++)
             {
+                Console.WriteLine($"Reading ResourceEntries #{i}, pos - {reader.BaseStream.Position}");
                 var rec = DnsRecord.DnsRecordRead(reader);
                 result.Resources.Add(rec);
             }
