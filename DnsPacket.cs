@@ -303,22 +303,22 @@ public struct DnsPacket
     public List<DnsRecord> Authorities;
     public List<DnsRecord> Resources;
 
-    public DnsPacket(List<DnsRecord> answers, List<DnsRecord> authorities, List<DnsRecord> resources, List<DnsQuestion> questions)
+    private DnsPacket(DnsHeader header)
     {
-        Answers = answers;
-        Authorities = authorities;
-        Resources = resources;
-        Questions = questions;
-        Header = DnsHeader.New();
+        Header = header;
+        Questions = new List<DnsQuestion>(header.Questions);
+        Answers =  new List<DnsRecord>(header.Answers);
+        Authorities = new List<DnsRecord>(header.AuthoritativeEntries);
+        Resources = new List<DnsRecord>(header.ResourceEntries);
     }
 
     public static DnsPacket FromStream(Stream stream)
     {
-        var result = new DnsPacket(new List<DnsRecord>(),new List<DnsRecord>(), new List<DnsRecord>(), new List<DnsQuestion>());
-        
         using (var reader = new BinaryReader(stream))
         {
-            result.Header.Read(reader);
+            var header = DnsHeader.New();
+            header.Read(reader);
+            var result = new DnsPacket(header);
             for (ushort i = 0; i < result.Header.Questions; i++)
             {
                 var question = new DnsQuestion();
@@ -342,9 +342,8 @@ public struct DnsPacket
                 var rec = DnsRecord.DnsRecordRead(reader);
                 result.Resources.Add(rec);
             }
+            return result;
         }
-
-        return result;
     }
 }
 }
