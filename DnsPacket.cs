@@ -292,7 +292,7 @@ namespace DnsServer
         public string Domain { get; set; }
         public uint Ttl { get; set; }
 
-        public abstract long DnsRecordWrite(BeBinaryWriter writer);
+        public abstract void DnsRecordWrite(BeBinaryWriter writer);
 
         public static DnsRecord DnsRecordRead(BeBinaryReader reader)
         {
@@ -371,11 +371,11 @@ namespace DnsServer
             return $"Unknown - domain {Domain}, QType - {QType}, ttl - {Ttl}, DataLen - {DataLen}";
         }
 
-        public override long DnsRecordWrite(BeBinaryWriter writer)
+        public override void DnsRecordWrite(BeBinaryWriter writer)
         {
-            var startPos = writer.BaseStream.Position;
+            // var startPos = writer.BaseStream.Position;
             Console.WriteLine($"Skipping record {this}");
-            return writer.BaseStream.Position - startPos;
+            // return writer.BaseStream.Position - startPos;
         }
     }
 
@@ -388,9 +388,9 @@ namespace DnsServer
             return $"A - domain {Domain}, ip - {Address}, ttl - {Ttl}";
         }
 
-        public override long DnsRecordWrite(BeBinaryWriter writer)
+        public override void DnsRecordWrite(BeBinaryWriter writer)
         {
-            var startPos = writer.BaseStream.Position;
+            // var startPos = writer.BaseStream.Position;
             DnsQuestion.WriteQname(writer, Domain);
 
             writer.Write((ushort)QueryType.A);
@@ -399,7 +399,7 @@ namespace DnsServer
             writer.Write((ushort)4);
 
             writer.Write(Address.GetAddressBytes());
-            return writer.BaseStream.Position - startPos;
+            // return writer.BaseStream.Position - startPos;
         }
     }
 
@@ -412,9 +412,9 @@ namespace DnsServer
             return $"AAAA - domain {Domain}, ip - {Address}, ttl - {Ttl}";
         }
 
-        public override long DnsRecordWrite(BeBinaryWriter writer)
+        public override void DnsRecordWrite(BeBinaryWriter writer)
         {
-            var startPos = writer.BaseStream.Position;
+            // var startPos = writer.BaseStream.Position;
             DnsQuestion.WriteQname(writer, Domain);
 
             writer.Write((ushort)QueryType.AAAA);
@@ -422,7 +422,7 @@ namespace DnsServer
             writer.Write(Ttl);
             writer.Write((ushort)16);
             writer.Write(Address.GetAddressBytes());
-            return writer.BaseStream.Position - startPos;
+            // return writer.BaseStream.Position - startPos;
         }
     }
 
@@ -435,9 +435,9 @@ namespace DnsServer
             return $"NS - domain {Domain}, host - {Host}, ttl - {Ttl}";
         }
 
-        public override long DnsRecordWrite(BeBinaryWriter writer)
+        public override void DnsRecordWrite(BeBinaryWriter writer)
         {
-            var startPos = writer.BaseStream.Position;
+            // var startPos = writer.BaseStream.Position;
             DnsQuestion.WriteQname(writer, Domain);
 
             writer.Write((ushort)QueryType.NS);
@@ -453,7 +453,7 @@ namespace DnsServer
             // writer.BaseStream.
             // writer.Write((ushort)16);
             // writer.Write(Address.GetAddressBytes());
-            return writer.BaseStream.Position - startPos;
+            // return writer.BaseStream.Position - startPos;
         }
     }
 
@@ -466,9 +466,9 @@ namespace DnsServer
             return $"CNAME - domain {Domain}, host - {Host}, ttl - {Ttl}";
         }
 
-        public override long DnsRecordWrite(BeBinaryWriter writer)
+        public override void DnsRecordWrite(BeBinaryWriter writer)
         {
-            var startPos = writer.BaseStream.Position;
+            // var startPos = writer.BaseStream.Position;
             DnsQuestion.WriteQname(writer, Domain);
 
             writer.Write((ushort)QueryType.CNAME);
@@ -479,7 +479,7 @@ namespace DnsServer
 
             DnsQuestion.WriteQname(writer, Host);
 
-            return writer.BaseStream.Position - startPos;
+            // return writer.BaseStream.Position - startPos;
         }
     }
 
@@ -493,7 +493,7 @@ namespace DnsServer
             return $"NS - domain {Domain}, host - {Host}, Priority - {Priority}, ttl - {Ttl}";
         }
 
-        public override long DnsRecordWrite(BeBinaryWriter writer)
+        public override void DnsRecordWrite(BeBinaryWriter writer)
         {
             var startPos = writer.BaseStream.Position;
             DnsQuestion.WriteQname(writer, Domain);
@@ -507,7 +507,7 @@ namespace DnsServer
 
             DnsQuestion.WriteQname(writer, Host);
 
-            return writer.BaseStream.Position - startPos;
+            // return writer.BaseStream.Position - startPos;
         }
     }
 
@@ -530,26 +530,26 @@ namespace DnsServer
 
         public void Log(ZeroLog.ILog log)
         {
-            log.InfoFormat("Header - {0}", Header.ToString());
+            log.DebugFormat("Header - {0}", Header.ToString());
 
             foreach (var q in Questions)
             {
-                log.InfoFormat("Question - {0}", q.ToString());
+                log.DebugFormat("Question - {0}", q.ToString());
             }
 
             foreach (var a in Answers)
             {
-                log.InfoFormat("Answer - {0}", a.ToString());
+                log.DebugFormat("Answer - {0}", a.ToString());
             }
 
             foreach (var a in Authorities)
             {
-                log.InfoFormat("Authority - {0}", a.ToString());
+                log.DebugFormat("Authority - {0}", a.ToString());
             }
 
             foreach (var r in Resources)
             {
-                log.InfoFormat("Resource - {0}", r.ToString());
+                log.DebugFormat("Resource - {0}", r.ToString());
             }
         }
 
