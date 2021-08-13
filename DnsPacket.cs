@@ -111,6 +111,21 @@ public struct DnsHeader
 
     public void Write(BeBinaryWriter writer)
     {
+        writer.Write(Id);
+        writer.Write(Convert.ToByte(RecursionDesired) |
+                     Convert.ToByte(TruncatedMessage) << 1 |
+                     Convert.ToByte(AuthoritativeAnswer) << 2 |
+                     Opcode << 3 |
+                     Convert.ToByte(Response) << 7);
+        writer.Write((byte)ResCode |
+                     Convert.ToByte(CheckingDisabled) << 4 |
+                     Convert.ToByte(AuthedData) << 5 |
+                     Convert.ToByte(Z) << 6 |
+                     Convert.ToByte(RecursionAvailable) << 7);
+        writer.Write(Questions);
+        writer.Write(Answers);
+        writer.Write(AuthoritativeEntries);
+        writer.Write(AuthoritativeEntries);
         
     }
 }
@@ -128,6 +143,13 @@ public struct DnsQuestion
     public override string ToString()
     {
         return $"DnsQuestion - {Name}, QType - {Enum.GetName(QType)}";
+    }
+
+    public void Write(BeBinaryWriter writer)
+    {
+        WriteQname(writer, Name);
+        writer.Write((ushort)QType);
+        writer.Write((byte)1);
     }
 
     /// Read a qname
@@ -260,6 +282,8 @@ public abstract class DnsRecord
 {
     public string Domain { get; set; }
     public uint Ttl { get; set; }
+
+    public abstract long DnsRecordWrite(BeBinaryWriter writer);
     public static DnsRecord DnsRecordRead(BeBinaryReader reader)
     {
         DnsQuestion.ReadQname(reader,out var domain);
@@ -306,6 +330,13 @@ public class DnsRecordUnknown: DnsRecord
     {
         return $"Unknown - domain {Domain}, QType - {QType}, ttl - {Ttl}, DataLen - {DataLen}";
     }
+
+    public override long DnsRecordWrite(BeBinaryWriter writer)
+    {
+        var startPos = writer.BaseStream.Position;
+        Console.WriteLine($"Skipping record {this}");
+        return writer.BaseStream.Position - startPos;
+    }
 }
 
 public class DnsRecordA: DnsRecord
@@ -314,6 +345,20 @@ public class DnsRecordA: DnsRecord
     public override string ToString()
     {
         return $"A - domain {Domain}, ip - {Address}, ttl - {Ttl}";
+    }
+
+    public override long DnsRecordWrite(BeBinaryWriter writer)
+    {
+        var startPos = writer.BaseStream.Position;
+        DnsQuestion.WriteQname(writer, Domain);
+        
+        writer.Write((ushort)QueryType.A);
+        writer.Write((ushort)1);
+        writer.Write(Ttl);
+        writer.Write((ushort)4);
+        
+        writer.Write(Address.GetAddressBytes());
+        return writer.BaseStream.Position - startPos;
     }
 }
 
