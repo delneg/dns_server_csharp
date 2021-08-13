@@ -173,7 +173,6 @@ namespace DnsServer
             // qname, while keeping track of our progress on the current qname
             // using this variable.
             var pos = reader.BaseStream.Position;
-            Console.WriteLine($"Position - {pos} of {reader.BaseStream.Length}");
             // track whether or not we've jumped
             var jumped = false;
             const int maxJumps = 5;
@@ -297,7 +296,7 @@ namespace DnsServer
         public uint Ttl { get; set; }
 
         public abstract void DnsRecordWrite(BeBinaryWriter writer);
-
+        
         public static DnsRecord DnsRecordRead(BeBinaryReader reader)
         {
             
@@ -313,7 +312,6 @@ namespace DnsServer
             {
                 case QueryType.A:
                 {
-                    Console.WriteLine("Reading A");
                     return new DnsRecordA
                     {
                         Domain = domain,
@@ -322,7 +320,6 @@ namespace DnsServer
                     };
                 }
                 case QueryType.AAAA:
-                    Console.WriteLine("Reading AAAA");
                     return new DnsRecordAAAA
                     {
                         Domain = domain,
@@ -330,7 +327,6 @@ namespace DnsServer
                         Ttl = ttl
                     };
                 case QueryType.NS:
-                    Console.WriteLine("Reading NS");
                     DnsQuestion.ReadQname(reader, out var ns);
                     return new DnsRecordNS
                     {
@@ -339,7 +335,6 @@ namespace DnsServer
                         Ttl = ttl
                     };
                 case QueryType.CNAME:
-                    Console.WriteLine("Reading CNAME");
                     DnsQuestion.ReadQname(reader, out var cname);
                     return new DnsRecordCNAME
                     {
@@ -348,7 +343,6 @@ namespace DnsServer
                         Ttl = ttl
                     };
                 case QueryType.MX:
-                    Console.WriteLine("Reading MX");
                     var priority = reader.ReadUInt16();
                     DnsQuestion.ReadQname(reader, out var mx);
                     return new DnsRecordMX
