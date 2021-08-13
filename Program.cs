@@ -17,8 +17,8 @@ namespace DnsServer
             BasicConfigurator.Configure(new[] { new ConsoleAppender() });
             var log = LogManager.GetLogger("Main");
 
-            var qName = "www.bearle.ru";
-            var qType = QueryType.A;
+            var qName = "yahoo.com";
+            var qType = QueryType.MX;
 
             var udpClient = new UdpClient(43210);
 
