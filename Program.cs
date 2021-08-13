@@ -39,19 +39,20 @@ namespace DnsServer
             var resPacket = DnsPacket.FromStream(response);
             log.Debug("Response packet:");
             resPacket.Log(log);
+            udpClient.Close();
             return resPacket;
         }
 
-        static async Task HandleQuery(ILog log, Socket socket, CancellationToken cancellationToken = default)
+        static async Task HandleQuery(ILog log, UdpClient client, CancellationToken cancellationToken = default)
         {
-            using var connection = SocketConnection.Create(socket);
+            // using var connection = SocketConnection.Create(socket);
             log.Debug("Created connection");
-            var readResult = await connection.Input.ReadAsync(cancellationToken);
+            var readResult = await client.ReceiveAsync(cancellationToken);
             var stream = new MemoryStream(readResult.Buffer.ToArray());
             log.Debug("Created stream");
             // Next, `DnsPacket::from_buffer` is used to parse the raw bytes into
             // a `DnsPacket`.
-            var reqPacket = DnsPacket.FromStream(stream, leaveOpen:true);
+            var reqPacket = DnsPacket.FromStream(stream, leaveOpen:false);
             log.Debug("Request packet:");
             reqPacket.Log(log);
             
@@ -87,10 +88,9 @@ namespace DnsServer
                 }
                 catch (Exception e)
                 {
-                    log.ErrorFormat("Exception in lookup - {0}",e);
+                    log.ErrorFormat("Exception in lookup - {0}",e.ToString());
                     respPacket.Header.ResCode = ResultCode.SERVFAIL;
                 }
-                
                 
             }
             else
@@ -105,7 +105,7 @@ namespace DnsServer
             log.Info("Writing response to stream");
             var ms = new MemoryStream();
             respPacket.ToStream(ms, leaveOpen: false);
-            await connection.Output.WriteAsync(ms.ToArray(),cancellationToken);
+            await client.SendAsync(ms.ToArray(),readResult.RemoteEndPoint, cancellationToken);
             log.Info("Completed");
         }
         
@@ -123,7 +123,7 @@ namespace DnsServer
             var client = new UdpClient(2053);
             while (true)
             {
-                await HandleQuery(log, client.Client);
+                await HandleQuery(log, client);
             }
             
             LogManager.Shutdown();
