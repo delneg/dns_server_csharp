@@ -36,28 +36,28 @@ namespace DnsServer
             var ms = new MemoryStream();
             var watch = new Stopwatch();
             watch.Start();
-            packet.ToStream(ms, leaveOpen:true);
+            packet.ToStream(ms, leaveOpen: true);
             watch.Stop();
-            
+
             log.InfoFormat("Wrote packet to stream in {0} ms", watch.ElapsedMilliseconds.ToString());
             ms.Seek(0, SeekOrigin.Begin);
-            log.Info(BitConverter.ToString(ms.ToArray()).Replace("-",""));
+            log.Info(BitConverter.ToString(ms.ToArray()).Replace("-", ""));
 
             ms.Seek(0, SeekOrigin.Begin);
             watch.Start();
-            var sanityCheckPacket = DnsPacket.FromStream(ms, leaveOpen:true);
+            var sanityCheckPacket = DnsPacket.FromStream(ms, leaveOpen: true);
             watch.Stop();
             log.InfoFormat("Read sanity packet from stream in {0} ms", watch.ElapsedMilliseconds.ToString());
-            
+
             sanityCheckPacket.Log(log);
             ms.Seek(0, SeekOrigin.Begin);
             var respCode = await udpClient.SendAsync(ms.ToArray());
             log.InfoFormat("Received response {0} from udp server", respCode.ToString());
-            
+
             var RemoteIpEndPoint = new IPEndPoint(IPAddress.Any, 0);
             var response = new MemoryStream(udpClient.Receive(ref RemoteIpEndPoint));
-            
-            log.Info(BitConverter.ToString(response.ToArray()).Replace("-",""));
+
+            log.Info(BitConverter.ToString(response.ToArray()).Replace("-", ""));
             watch.Start();
             var resPacket = DnsPacket.FromStream(response);
             watch.Stop();
@@ -66,8 +66,6 @@ namespace DnsServer
             resPacket.Log(log);
 
             LogManager.Shutdown();
-
         }
     }
 }
-
