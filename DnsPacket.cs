@@ -19,24 +19,24 @@ namespace DnsServer
 
 public struct DnsHeader
 {
-    public ushort Id { get; private set; } // 16 bits
+    public ushort Id { get;  set; } // 16 bits
     
-    public bool RecursionDesired { get; private set; } // 1 bit
-    public bool TruncatedMessage { get; private set; } // 1 bit
-    public bool AuthoritativeAnswer { get; private set; } // 1 bit
-    public byte Opcode { get; private set; } // 4 bits
-    public bool Response { get; private set; } // 1 bit
+    public bool RecursionDesired { get; set; } // 1 bit
+    public bool TruncatedMessage { get; set; } // 1 bit
+    public bool AuthoritativeAnswer { get; set; } // 1 bit
+    public byte Opcode { get; set; } // 4 bits
+    public bool Response { get; set; } // 1 bit
     
-    public ResultCode ResCode { get; private set; } // 4 bits
-    public bool CheckingDisabled { get; private set; } // 1 bit
-    public bool AuthedData { get; private set; } // 1 bit
-    public bool Z { get; private set; } // 1 bit
-    public bool RecursionAvailable { get; private set; } // 1 bit
+    public ResultCode ResCode { get; set; } // 4 bits
+    public bool CheckingDisabled { get; set; } // 1 bit
+    public bool AuthedData { get; set; } // 1 bit
+    public bool Z { get; set; } // 1 bit
+    public bool RecursionAvailable { get; set; } // 1 bit
     
-    public ushort Questions { get; private set; } // 16 bits
-    public ushort Answers { get; private set; } // 16 bits
-    public ushort AuthoritativeEntries { get; private set; } // 16 bits
-    public ushort ResourceEntries { get; private set; } // 16 bits
+    public ushort Questions { get;  set; } // 16 bits
+    public ushort Answers { get; set; } // 16 bits
+    public ushort AuthoritativeEntries { get; set; } // 16 bits
+    public ushort ResourceEntries { get; set; } // 16 bits
 
     public override string ToString()
     {
@@ -112,20 +112,24 @@ public struct DnsHeader
     public void Write(BeBinaryWriter writer)
     {
         writer.Write(Id);
-        writer.Write(Convert.ToByte(RecursionDesired) |
-                     Convert.ToByte(TruncatedMessage) << 1 |
-                     Convert.ToByte(AuthoritativeAnswer) << 2 |
-                     Opcode << 3 |
-                     Convert.ToByte(Response) << 7);
-        writer.Write((byte)ResCode |
-                     Convert.ToByte(CheckingDisabled) << 4 |
-                     Convert.ToByte(AuthedData) << 5 |
-                     Convert.ToByte(Z) << 6 |
-                     Convert.ToByte(RecursionAvailable) << 7);
+        writer.Write((byte)(
+            Convert.ToByte(RecursionDesired) << 0 |
+            (Convert.ToByte(TruncatedMessage) << 1) |
+            (Convert.ToByte(AuthoritativeAnswer) << 2) |
+            (Opcode << 3) |
+            (Convert.ToByte(Response) << 7)
+        ));
+        writer.Write((byte)(
+            (byte)ResCode |
+            (Convert.ToByte(CheckingDisabled) << 4) |
+            (Convert.ToByte(AuthedData) << 5) |
+            (Convert.ToByte(Z) << 6) |
+            (Convert.ToByte(RecursionAvailable) << 7)
+        ));
         writer.Write(Questions);
         writer.Write(Answers);
         writer.Write(AuthoritativeEntries);
-        writer.Write(AuthoritativeEntries);
+        writer.Write(ResourceEntries);
         
     }
 }
@@ -138,8 +142,8 @@ public enum QueryType
 
 public struct DnsQuestion
 {
-    public string Name { get; private set; }
-    public QueryType QType { get; private set; }
+    public string Name { get; set; }
+    public QueryType QType { get;  set; }
     public override string ToString()
     {
         return $"DnsQuestion - {Name}, QType - {Enum.GetName(QType)}";
@@ -370,7 +374,7 @@ public struct DnsPacket
     public List<DnsRecord> Authorities;
     public List<DnsRecord> Resources;
 
-    private DnsPacket(DnsHeader header)
+    public DnsPacket(DnsHeader header)
     {
         Header = header;
         Questions = new List<DnsQuestion>(header.Questions);
@@ -379,38 +383,103 @@ public struct DnsPacket
         Resources = new List<DnsRecord>(header.ResourceEntries);
     }
 
-    public static DnsPacket FromStream(Stream stream)
+    public void Log(ZeroLog.ILog log)
     {
-        using (var reader = new BeBinaryReader(stream))
-        {
-            var header = DnsHeader.New();
-            header.Read(reader);
-            var result = new DnsPacket(header);
-            for (ushort i = 0; i < result.Header.Questions; i++)
-            {
-                var question = new DnsQuestion();
-                question.Read(reader);
-                result.Questions.Add(question);
-            }
+        log.InfoFormat("Header - {0}", Header.ToString());
 
-            for (ushort i = 0; i < result.Header.Answers; i++)
-            {
-                var rec = DnsRecord.DnsRecordRead(reader);
-                result.Answers.Add(rec);
-            }
-        
-            for (ushort i = 0; i < result.Header.AuthoritativeEntries; i++)
-            {
-                var rec = DnsRecord.DnsRecordRead(reader);
-                result.Authorities.Add(rec);
-            }
-            for (ushort i = 0; i < result.Header.ResourceEntries; i++)
-            {
-                var rec = DnsRecord.DnsRecordRead(reader);
-                result.Resources.Add(rec);
-            }
-            return result;
+        foreach (var q in Questions)
+        {
+            log.InfoFormat("Question - {0}", q.ToString());
+        }
+
+        foreach (var a in Answers)
+        {
+            log.InfoFormat("Answer - {0}", a.ToString());
+        }
+        foreach (var a in Authorities)
+        {
+            log.InfoFormat("Authority - {0}", a.ToString());
+        }
+        foreach (var r in Resources)
+        {
+            log.InfoFormat("Resource - {0}", r.ToString());
         }
     }
+
+    private void ToWriter(BeBinaryWriter writer)
+    {
+        Header.Questions = (ushort) Questions.Count;
+        Header.Answers = (ushort)Answers.Count;
+        Header.AuthoritativeEntries = (ushort)Authorities.Count;
+        Header.ResourceEntries = (ushort)Resources.Count;
+        Header.Write(writer);
+
+        foreach (var q in Questions)
+        {
+            q.Write(writer);
+        }
+
+        foreach (var a in Answers)
+        {
+            a.DnsRecordWrite(writer);
+        }
+
+        foreach (var a in Authorities)
+        {
+            a.DnsRecordWrite(writer);
+        }
+
+        foreach (var r in Resources)
+        {
+            r.DnsRecordWrite(writer);
+        }
+    }
+
+    public void ToStream(Stream stream, Encoding encoding = null, bool leaveOpen = false)
+    {
+        using (var writer = new BeBinaryWriter(stream, encoding ?? Encoding.UTF8, leaveOpen))
+        {
+            ToWriter(writer);
+        }
+    }
+
+    private static DnsPacket FromReader(BeBinaryReader reader)
+    {
+        var header = DnsHeader.New();
+        header.Read(reader);
+        var result = new DnsPacket(header);
+        for (ushort i = 0; i < result.Header.Questions; i++)
+        {
+            var question = new DnsQuestion();
+            question.Read(reader);
+            result.Questions.Add(question);
+        }
+
+        for (ushort i = 0; i < result.Header.Answers; i++)
+        {
+            var rec = DnsRecord.DnsRecordRead(reader);
+            result.Answers.Add(rec);
+        }
+        
+        for (ushort i = 0; i < result.Header.AuthoritativeEntries; i++)
+        {
+            var rec = DnsRecord.DnsRecordRead(reader);
+            result.Authorities.Add(rec);
+        }
+        for (ushort i = 0; i < result.Header.ResourceEntries; i++)
+        {
+            var rec = DnsRecord.DnsRecordRead(reader);
+            result.Resources.Add(rec);
+        }
+        return result;
+    }
+    public static DnsPacket FromStream(Stream stream, Encoding encoding = null, bool leaveOpen = false)
+    {
+        using (var reader = new BeBinaryReader(stream, encoding ?? Encoding.UTF8, leaveOpen))
+        {
+            return FromReader(reader);
+        }
+    }
+    
 }
 }
