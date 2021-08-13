@@ -12,3 +12,4 @@ Wannabe's:
 2. Write benchmarks
 3. Structure chapter branches to be hierarchical
 4. Better comments
+5. Reduce allocations & remove linq etc.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
 using Be.IO;
@@ -172,7 +173,7 @@ namespace DnsServer
             // qname, while keeping track of our progress on the current qname
             // using this variable.
             var pos = reader.BaseStream.Position;
-
+            Console.WriteLine($"Position - {pos} of {reader.BaseStream.Length}");
             // track whether or not we've jumped
             var jumped = false;
             const int maxJumps = 5;
@@ -207,7 +208,10 @@ namespace DnsServer
                 {
                     // Read another byte, calculate offset and perform the jump by
                     // updating our local position variable
-                    var b2 = (ushort)reader.PeekChar();
+                    
+                    long origPos = reader.BaseStream.Position;
+                    byte b2 = reader.ReadByte();
+                    reader.BaseStream.Position = origPos;
 
                     if (!jumped)
                     {
@@ -296,6 +300,7 @@ namespace DnsServer
 
         public static DnsRecord DnsRecordRead(BeBinaryReader reader)
         {
+            
             DnsQuestion.ReadQname(reader, out var domain);
 
             var qtype_num = reader.ReadUInt16();
@@ -308,6 +313,7 @@ namespace DnsServer
             {
                 case QueryType.A:
                 {
+                    Console.WriteLine("Reading A");
                     return new DnsRecordA
                     {
                         Domain = domain,
@@ -316,13 +322,15 @@ namespace DnsServer
                     };
                 }
                 case QueryType.AAAA:
+                    Console.WriteLine("Reading AAAA");
                     return new DnsRecordAAAA
                     {
                         Domain = domain,
-                        Address = new IPAddress(reader.ReadBytes(4 * 4).AsSpan()), // ipv6 address is 16 bytes
+                        Address = new IPAddress(reader.ReadBytes(16).AsSpan()), // ipv6 address is 16 bytes
                         Ttl = ttl
                     };
                 case QueryType.NS:
+                    Console.WriteLine("Reading NS");
                     DnsQuestion.ReadQname(reader, out var ns);
                     return new DnsRecordNS
                     {
@@ -331,6 +339,7 @@ namespace DnsServer
                         Ttl = ttl
                     };
                 case QueryType.CNAME:
+                    Console.WriteLine("Reading CNAME");
                     DnsQuestion.ReadQname(reader, out var cname);
                     return new DnsRecordCNAME
                     {
@@ -339,6 +348,7 @@ namespace DnsServer
                         Ttl = ttl
                     };
                 case QueryType.MX:
+                    Console.WriteLine("Reading MX");
                     var priority = reader.ReadUInt16();
                     DnsQuestion.ReadQname(reader, out var mx);
                     return new DnsRecordMX
@@ -511,6 +521,77 @@ namespace DnsServer
             Answers = new List<DnsRecord>(header.Answers);
             Authorities = new List<DnsRecord>(header.AuthoritativeEntries);
             Resources = new List<DnsRecord>(header.ResourceEntries);
+        }
+
+        // It's useful to be able to pick a random A record from a packet. When we
+        /// get multiple IP's for a single name, it doesn't matter which one we
+        /// choose, so in those cases we can now pick one at random.
+        public IPAddress GetRandomA()
+        {
+            foreach (var answer in Answers)
+            {
+                if (answer is DnsRecordA record)
+                {
+                    return record.Address;
+                }
+            }
+
+            return null;
+        }
+
+        /// A helper function which returns an iterator over all name servers in
+        /// the authorities section, represented as (domain, host) tuples
+        public IEnumerable<(string, string)> GetNS(string qName)
+        {
+            return Authorities
+                // In practice, these are always NS records in well formed packages.
+                // Convert the NS records to a tuple which has only the data we need
+                // to make it easy to work with.
+                .Where(x => x is DnsRecordNS)
+                .Select(x => (((DnsRecordNS)x).Domain, ((DnsRecordNS)x).Host))
+                // Discard servers which aren't authoritative to our query
+                .Where(x => qName.EndsWith(x.Domain));
+        }
+
+        /// We'll use the fact that name servers often bundle the corresponding
+        /// A records when replying to an NS query to implement a function that
+        /// returns the actual IP for an NS record if possible.
+        public IPAddress GetResolvedNS(string qName)
+        {
+
+            // Get an iterator over the nameservers in the authorities section
+            foreach (var (_,host) in GetNS(qName))
+            {
+                // Now we need to look for a matching A record in the additional
+                // section. Since we just want the first valid record, we can just
+                // build a stream of matching records.
+                foreach (var resource in Resources)
+                {
+                    // Filter for A records where the domain match the host
+                    // of the NS record that we are currently processing
+                    if (resource.Domain == host && resource is DnsRecordA recordA)
+                    {
+                        // Finally, pick the first valid entry
+                        return recordA.Address;
+                    }
+                }
+            }
+            
+            return null;
+        }
+
+        /// However, not all name servers are as that nice. In certain cases there won't
+        /// be any A records in the additional section, and we'll have to perform *another*
+        /// lookup in the midst. For this, we introduce a method for returning the host
+        /// name of an appropriate name server.
+        public string GetUnresolvedNS(string qName)
+        {
+            foreach (var (_, host) in GetNS(qName))
+            {
+                return host;
+            }
+
+            return null;
         }
 
         public void Log(ZeroLog.ILog log)
