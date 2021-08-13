@@ -373,9 +373,7 @@ namespace DnsServer
 
         public override void DnsRecordWrite(BeBinaryWriter writer)
         {
-            // var startPos = writer.BaseStream.Position;
             Console.WriteLine($"Skipping record {this}");
-            // return writer.BaseStream.Position - startPos;
         }
     }
 
@@ -414,7 +412,6 @@ namespace DnsServer
 
         public override void DnsRecordWrite(BeBinaryWriter writer)
         {
-            // var startPos = writer.BaseStream.Position;
             DnsQuestion.WriteQname(writer, Domain);
 
             writer.Write((ushort)QueryType.AAAA);
@@ -422,7 +419,6 @@ namespace DnsServer
             writer.Write(Ttl);
             writer.Write((ushort)16);
             writer.Write(Address.GetAddressBytes());
-            // return writer.BaseStream.Position - startPos;
         }
     }
 
@@ -437,23 +433,15 @@ namespace DnsServer
 
         public override void DnsRecordWrite(BeBinaryWriter writer)
         {
-            // var startPos = writer.BaseStream.Position;
             DnsQuestion.WriteQname(writer, Domain);
 
             writer.Write((ushort)QueryType.NS);
             writer.Write((ushort)1);
             writer.Write(Ttl);
 
-            // var pos = writer.BaseStream.Position;
             writer.Write((ushort)Host.Length * sizeof(char));
 
             DnsQuestion.WriteQname(writer, Host);
-
-            // var size = writer.BaseStream.Position - (pos + 2);
-            // writer.BaseStream.
-            // writer.Write((ushort)16);
-            // writer.Write(Address.GetAddressBytes());
-            // return writer.BaseStream.Position - startPos;
         }
     }
 
@@ -468,7 +456,6 @@ namespace DnsServer
 
         public override void DnsRecordWrite(BeBinaryWriter writer)
         {
-            // var startPos = writer.BaseStream.Position;
             DnsQuestion.WriteQname(writer, Domain);
 
             writer.Write((ushort)QueryType.CNAME);
@@ -478,8 +465,6 @@ namespace DnsServer
             writer.Write((ushort)Host.Length * sizeof(char));
 
             DnsQuestion.WriteQname(writer, Host);
-
-            // return writer.BaseStream.Position - startPos;
         }
     }
 

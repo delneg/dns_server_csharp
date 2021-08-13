@@ -1,14 +1,10 @@
 ﻿using System;
-using System.Buffers;
-using System.Diagnostics;
 using System.IO;
-using System.IO.Pipelines;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using Pipelines.Sockets.Unofficial;
 using ZeroLog;
 using ZeroLog.Appenders;
 using ZeroLog.Config;
@@ -21,7 +17,7 @@ namespace DnsServer
         {
             var udpClient = new UdpClient(localPort);
             var header = DnsHeader.New();
-            header.Id = 6666;
+            header.Id = (ushort) Random.Shared.Next();
             header.Questions = 1;
             header.RecursionDesired = true;
             var question = new DnsQuestion { Name = qName, QType = qType };
@@ -45,7 +41,6 @@ namespace DnsServer
 
         static async Task HandleQuery(ILog log, UdpClient client, CancellationToken cancellationToken = default)
         {
-            // using var connection = SocketConnection.Create(socket);
             log.Debug("Created connection");
             var readResult = await client.ReceiveAsync(cancellationToken);
             var stream = new MemoryStream(readResult.Buffer.ToArray());
@@ -84,7 +79,6 @@ namespace DnsServer
                     respPacket.Authorities.AddRange(res.Authorities);
                     respPacket.Resources.AddRange(res.Resources);
                     log.Info("Finished lookup packet");
-                    // respPacket.ToStream(connection.Output.AsStream(), leaveOpen:true);
                 }
                 catch (Exception e)
                 {
