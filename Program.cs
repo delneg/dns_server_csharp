@@ -31,7 +31,7 @@ namespace DnsServer
 
             log.Info("Request packet:");
             packet.Log(log);
-            // udpClient.Connect("8.8.8.8", 53);
+            udpClient.Connect("8.8.8.8", 53);
             var ms = new MemoryStream();
             
             packet.ToStream(ms, leaveOpen:true);
@@ -42,15 +42,17 @@ namespace DnsServer
             var sanityCheckPacket = DnsPacket.FromStream(ms, leaveOpen:true);
             
             sanityCheckPacket.Log(log);
-            // var respCode = udpClient.Send(ms.ToArray());
-            // log.InfoFormat("Received response {0} from udp server", respCode.ToString());
-            //
-            // var RemoteIpEndPoint = new IPEndPoint(IPAddress.Any, 0);
-            // var response = new MemoryStream(udpClient.Receive(ref RemoteIpEndPoint));
-            //
-            // log.Info("Response packet:");
-            // var resPacket = DnsPacket.FromStream(response);
-            // resPacket.Log(log);
+            ms.Seek(0, SeekOrigin.Begin);
+            var respCode = udpClient.Send(ms.ToArray());
+            log.InfoFormat("Received response {0} from udp server", respCode.ToString());
+            
+            var RemoteIpEndPoint = new IPEndPoint(IPAddress.Any, 0);
+            var response = new MemoryStream(udpClient.Receive(ref RemoteIpEndPoint));
+            
+            log.Info(BitConverter.ToString(response.ToArray()).Replace("-",""));
+            log.Info("Response packet:");
+            var resPacket = DnsPacket.FromStream(response);
+            resPacket.Log(log);
             
             
 
