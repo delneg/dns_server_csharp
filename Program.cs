@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
@@ -34,9 +35,12 @@ namespace DnsServer
             var ms = new MemoryStream();
             
             packet.ToStream(ms, leaveOpen:true);
+            ms.Seek(0, SeekOrigin.Begin);
+            log.Info(BitConverter.ToString(ms.ToArray()).Replace("-",""));
 
             ms.Seek(0, SeekOrigin.Begin);
             var sanityCheckPacket = DnsPacket.FromStream(ms, leaveOpen:true);
+            
             sanityCheckPacket.Log(log);
             // var respCode = udpClient.Send(ms.ToArray());
             // log.InfoFormat("Received response {0} from udp server", respCode.ToString());

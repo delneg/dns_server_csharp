@@ -153,7 +153,7 @@ public struct DnsQuestion
     {
         WriteQname(writer, Name);
         writer.Write((ushort)QType);
-        writer.Write((byte)1);
+        writer.Write((ushort)1);
     }
 
     /// Read a qname
@@ -271,7 +271,7 @@ public struct DnsQuestion
             writer.Write(label);
         }
         
-        writer.Write(0);
+        writer.Write((byte)0);
     }
     public void Read(BeBinaryReader reader)
     {
