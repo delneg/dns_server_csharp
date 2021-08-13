@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
+using Be.IO;
 
 namespace DnsServer
 {
@@ -83,10 +84,10 @@ public struct DnsHeader
     }
 
     
-    public void Read(BinaryReader reader)
+    public void Read(BeBinaryReader reader)
     {
-        Id = reader.ReadUInt16BE();
-        var flags = reader.ReadUInt16BE();
+        Id = reader.ReadUInt16();
+        var flags = reader.ReadUInt16();
         var a = (byte)(flags >> 8);
         var b = (byte)(flags & 0xFF);
 
@@ -102,10 +103,15 @@ public struct DnsHeader
         Z = (b & (1 << 6)) > 0;
         RecursionAvailable = (b & (1 << 7)) > 0;
 
-        Questions = reader.ReadUInt16BE();
-        Answers = reader.ReadUInt16BE();
-        AuthoritativeEntries = reader.ReadUInt16BE();
-        ResourceEntries = reader.ReadUInt16BE();
+        Questions = reader.ReadUInt16();
+        Answers = reader.ReadUInt16();
+        AuthoritativeEntries = reader.ReadUInt16();
+        ResourceEntries = reader.ReadUInt16();
+    }
+
+    public void Write(BeBinaryWriter writer)
+    {
+        
     }
 }
 
@@ -129,7 +135,7 @@ public struct DnsQuestion
     /// The tricky part: Reading domain names, taking labels into consideration.
     /// Will take something like [3]www[6]google[3]com[0] and append
     /// www.google.com to outstr.
-    public static void ReadQname(BinaryReader reader,out string outString)
+    public static void ReadQname(BeBinaryReader reader,out string outString)
     {
         // Since we might encounter jumps, we'll keep track of our position
         // locally as opposed to using the position within the struct. This
@@ -225,12 +231,28 @@ public struct DnsQuestion
         }
         outString = builder.ToString();
     }
-    public void Read(BinaryReader reader)
+
+    public static void WriteQname(BeBinaryWriter writer, string qname)
+    {
+        
+        foreach (var label in qname.Split('.'))
+        {
+            var len = label.Length;
+            if (len > 0x3f)
+            {
+                throw new Exception("Single label exceeds 63 characters of length");
+            }
+            writer.Write(label);
+        }
+        
+        writer.Write(0);
+    }
+    public void Read(BeBinaryReader reader)
     {
         ReadQname(reader,out var name);
         Name = name;
-        QType = (QueryType)reader.ReadUInt16BE();
-        var _ = reader.ReadUInt16BE();
+        QType = (QueryType)reader.ReadUInt16();
+        var _ = reader.ReadUInt16();
     }
 }
 
@@ -238,21 +260,21 @@ public abstract class DnsRecord
 {
     public string Domain { get; set; }
     public uint Ttl { get; set; }
-    public static DnsRecord DnsRecordRead(BinaryReader reader)
+    public static DnsRecord DnsRecordRead(BeBinaryReader reader)
     {
         DnsQuestion.ReadQname(reader,out var domain);
 
-        var qtype_num = reader.ReadUInt16BE();
+        var qtype_num = reader.ReadUInt16();
         var qtype = (QueryType)qtype_num;
-        var _ = reader.ReadUInt16BE();
-        var ttl = reader.ReadUInt32BE();
-        var data_len = reader.ReadUInt16BE();
+        var _ = reader.ReadUInt16();
+        var ttl = reader.ReadUInt32();
+        var data_len = reader.ReadUInt16();
 
         switch (qtype)
         {
             case QueryType.A:
             {
-                var raw_addr = reader.ReadUInt32BE();
+                var raw_addr = reader.ReadUInt32();
                 var addr = new IPAddress(raw_addr);
                 return new DnsRecordA
                 {
@@ -314,7 +336,7 @@ public struct DnsPacket
 
     public static DnsPacket FromStream(Stream stream)
     {
-        using (var reader = new BinaryReader(stream))
+        using (var reader = new BeBinaryReader(stream))
         {
             var header = DnsHeader.New();
             header.Read(reader);

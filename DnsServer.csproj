@@ -12,6 +12,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="Be.IO-multi" Version="1.0.0" />
       <PackageReference Include="ZeroLog" Version="1.6.1" />
     </ItemGroup>
 
