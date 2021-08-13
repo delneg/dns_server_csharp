@@ -7,8 +7,8 @@
 <!--        <Nullable>enable</Nullable>-->
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <LangVersion>latest</LangVersion>
-        <PublishTrimmed>true</PublishTrimmed>
-        <TrimMode>link</TrimMode>
+<!--        <PublishTrimmed>true</PublishTrimmed>-->
+<!--        <TrimMode>link</TrimMode>-->
     </PropertyGroup>
 
     <ItemGroup>
@@ -16,4 +16,12 @@
       <PackageReference Include="ZeroLog" Version="1.6.1" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Env Include="DOTNET_ReadyToRun=0" /> <!-- Disable AOT -->
+        <Env Include="DOTNET_TieredPGO=1" /> <!-- Enable instrumentation in tier0 -->
+        <Env Include="DOTNET_TC_CallCounting=0" /> <!-- Never promote methods to tier1 -->
+        <Env Include="DOTNET_TC_QuickJitForLoops=1" /> <!-- Don't bypass tier0 for methods with loops -->
+        <Env Include="DOTNET_JitCollect64BitCounts=1" />
+        <Env Include="DOTNET_JitEdgeProfiling=0" />
+    </ItemGroup>
 </Project>

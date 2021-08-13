@@ -137,7 +137,11 @@ public struct DnsHeader
 public enum QueryType
 {
     Unknown = 0,
-    A = 1
+    A = 1,
+    NS = 2,
+    CNAME = 5,
+    MX = 15,
+    AAAA = 28
 }
 
 public struct DnsQuestion
@@ -302,16 +306,47 @@ public abstract class DnsRecord
         {
             case QueryType.A:
             {
-                var raw_addr = reader.ReadUInt32();
-                var addr = new IPAddress(raw_addr);
                 return new DnsRecordA
                 {
                     Domain = domain,
-                    Address = addr,
+                    Address = new IPAddress(reader.ReadBytes(4).AsSpan()),
                     Ttl = ttl
                 };
             }
-            case QueryType.Unknown:
+            case QueryType.AAAA:
+                return new DnsRecordAAAA
+                {
+                    Domain = domain,
+                    Address = new IPAddress(reader.ReadBytes(4 * 4).AsSpan()), // ipv6 address is 16 bytes
+                    Ttl = ttl
+                };
+            case QueryType.NS:
+                DnsQuestion.ReadQname(reader,out var ns);
+                return new DnsRecordNS
+                {
+                    Domain = domain,
+                    Host = ns,
+                    Ttl = ttl
+                };
+            case QueryType.CNAME:
+                DnsQuestion.ReadQname(reader,out var cname);
+                return new DnsRecordCNAME
+                {
+                    Domain = domain,
+                    Host = cname,
+                    Ttl = ttl
+                };
+            case QueryType.MX:
+                var priority = reader.ReadUInt16();
+                DnsQuestion.ReadQname(reader,out var mx);
+                return new DnsRecordMX
+                {
+                    Domain = domain,
+                    Priority = priority,
+                    Host = mx,
+                    Ttl = ttl
+                };
+            default:
                 reader.BaseStream.Seek(data_len, SeekOrigin.Current);
                 return new DnsRecordUnknown
                 {
@@ -320,8 +355,6 @@ public abstract class DnsRecord
                     DataLen = data_len,
                     Ttl = ttl
                 };
-            default:
-                throw new ArgumentOutOfRangeException();
         }
     }
 }
@@ -366,6 +399,106 @@ public class DnsRecordA: DnsRecord
     }
 }
 
+public class DnsRecordAAAA: DnsRecord
+{
+    public IPAddress Address { get; set; }
+    public override string ToString()
+    {
+        return $"AAAA - domain {Domain}, ip - {Address}, ttl - {Ttl}";
+    }
+
+    public override long DnsRecordWrite(BeBinaryWriter writer)
+    {
+        var startPos = writer.BaseStream.Position;
+        DnsQuestion.WriteQname(writer, Domain);
+        
+        writer.Write((ushort)QueryType.AAAA);
+        writer.Write((ushort)1);
+        writer.Write(Ttl);
+        writer.Write((ushort)16);
+        writer.Write(Address.GetAddressBytes());
+        return writer.BaseStream.Position - startPos;
+    }
+}
+public class DnsRecordNS: DnsRecord
+{
+    public string Host { get; set; }
+    public override string ToString()
+    {
+        return $"NS - domain {Domain}, host - {Host}, ttl - {Ttl}";
+    }
+
+    public override long DnsRecordWrite(BeBinaryWriter writer)
+    {
+        var startPos = writer.BaseStream.Position;
+        DnsQuestion.WriteQname(writer, Domain);
+        
+        writer.Write((ushort)QueryType.NS);
+        writer.Write((ushort)1);
+        writer.Write(Ttl);
+
+        // var pos = writer.BaseStream.Position;
+        writer.Write((ushort)Host.Length * sizeof(char));
+        
+        DnsQuestion.WriteQname(writer, Host);
+
+        // var size = writer.BaseStream.Position - (pos + 2);
+        // writer.BaseStream.
+        // writer.Write((ushort)16);
+        // writer.Write(Address.GetAddressBytes());
+        return writer.BaseStream.Position - startPos;
+    }
+}
+public class DnsRecordCNAME: DnsRecord
+{
+    public string Host { get; set; }
+    public override string ToString()
+    {
+        return $"CNAME - domain {Domain}, host - {Host}, ttl - {Ttl}";
+    }
+
+    public override long DnsRecordWrite(BeBinaryWriter writer)
+    {
+        var startPos = writer.BaseStream.Position;
+        DnsQuestion.WriteQname(writer, Domain);
+        
+        writer.Write((ushort)QueryType.CNAME);
+        writer.Write((ushort)1);
+        writer.Write(Ttl);
+
+        writer.Write((ushort)Host.Length * sizeof(char));
+        
+        DnsQuestion.WriteQname(writer, Host);
+
+        return writer.BaseStream.Position - startPos;
+    }
+}
+public class DnsRecordMX: DnsRecord
+{
+    public ushort Priority { get; set; }
+    public string Host { get; set; }
+    public override string ToString()
+    {
+        return $"NS - domain {Domain}, host - {Host}, Priority - {Priority}, ttl - {Ttl}";
+    }
+
+    public override long DnsRecordWrite(BeBinaryWriter writer)
+    {
+        var startPos = writer.BaseStream.Position;
+        DnsQuestion.WriteQname(writer, Domain);
+        
+        writer.Write((ushort)QueryType.MX);
+        writer.Write((ushort)1);
+        writer.Write(Ttl);
+
+        writer.Write((ushort)Host.Length * sizeof(char));
+        writer.Write(Priority);
+        
+        DnsQuestion.WriteQname(writer, Host);
+        
+        return writer.BaseStream.Position - startPos;
+    }
+}
 public struct DnsPacket
 {
     public DnsHeader Header;

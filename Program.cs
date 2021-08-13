@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -16,7 +17,7 @@ namespace DnsServer
             BasicConfigurator.Configure(new[] { new ConsoleAppender() });
             var log = LogManager.GetLogger("Main");
 
-            var qName = "google.com";
+            var qName = "www.bearle.ru";
             var qType = QueryType.A;
 
             var udpClient = new UdpClient(43210);
@@ -33,28 +34,36 @@ namespace DnsServer
             packet.Log(log);
             udpClient.Connect("8.8.8.8", 53);
             var ms = new MemoryStream();
-            
+            var watch = new Stopwatch();
+            watch.Start();
             packet.ToStream(ms, leaveOpen:true);
+            watch.Stop();
+            
+            log.InfoFormat("Wrote packet to stream in {0} ms", watch.ElapsedMilliseconds.ToString());
             ms.Seek(0, SeekOrigin.Begin);
             log.Info(BitConverter.ToString(ms.ToArray()).Replace("-",""));
 
             ms.Seek(0, SeekOrigin.Begin);
+            watch.Start();
             var sanityCheckPacket = DnsPacket.FromStream(ms, leaveOpen:true);
+            watch.Stop();
+            log.InfoFormat("Read sanity packet from stream in {0} ms", watch.ElapsedMilliseconds.ToString());
             
             sanityCheckPacket.Log(log);
             ms.Seek(0, SeekOrigin.Begin);
-            var respCode = udpClient.Send(ms.ToArray());
+            var respCode = await udpClient.SendAsync(ms.ToArray());
             log.InfoFormat("Received response {0} from udp server", respCode.ToString());
             
             var RemoteIpEndPoint = new IPEndPoint(IPAddress.Any, 0);
             var response = new MemoryStream(udpClient.Receive(ref RemoteIpEndPoint));
             
             log.Info(BitConverter.ToString(response.ToArray()).Replace("-",""));
-            log.Info("Response packet:");
+            watch.Start();
             var resPacket = DnsPacket.FromStream(response);
+            watch.Stop();
+            log.InfoFormat("Read resp packet from stream in {0} ms", watch.ElapsedMilliseconds.ToString());
+            log.Info("Response packet:");
             resPacket.Log(log);
-            
-            
 
             LogManager.Shutdown();
 
